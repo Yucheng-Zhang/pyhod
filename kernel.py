@@ -31,12 +31,15 @@ def load_halos(args):
 
         halos['r200'] = catalog[:, 6]  # Mpc
 
+        del catalog
+
         rho = 2.775e11 * Om0 * h**2  # Msun/Mpc^3
 
+        print('>> Computing mass of the halos...')
         halos['Mvir'] = 4. / 3. * np.pi * np.power(halos['r200'], 3) * rho
         halos['Mhalo'] = np.copy(halos['Mvir'])
 
-        # get the redshift of the halos
+        print('>> Computing redshifts of the halos...')
         cosmo = FlatLambdaCDM(H0=H0, Om0=Om0)
         zs = np.linspace(z1, z2, 1000)
         rs = cosmo.comoving_distance(zs).value
