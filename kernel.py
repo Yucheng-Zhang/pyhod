@@ -24,14 +24,14 @@ def load_halos(args):
         halos['xyztype'] = 'sky'
         halos['vxyz'] = catalog[:, 3:6]  # km/s
 
-        # for now assuming the velocity is 0.2 times the velocity as place holder
-        # need to use some empirical relation here
-        halos['sigv'] = 0.2 * \
-            np.sqrt(np.sum(np.power(catalog[:, 3:6], 2), axis=1))
-
         halos['r200'] = catalog[:, 6]  # Mpc
 
         del catalog
+
+        # for now assuming the velocity is 0.2 times the velocity as place holder
+        # need to use some empirical relation here
+        halos['sigv'] = 0.2 * \
+            np.sqrt(np.sum(np.power(halos['vxyz'], 2), axis=1))
 
         rho = 2.775e11 * Om0 * h**2  # Msun/Mpc^3
 
