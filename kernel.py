@@ -18,6 +18,7 @@ def load_halos(args):
 
         catalog = np.fromfile(hf, count=Nhalo*10, dtype=np.float32)
         catalog = np.reshape(catalog, (Nhalo, 10))
+        print('++ catalog loaded')
 
         halos['xyz'] = catalog[:, :3]  # Mpc (comoving)
         # to say whether halo co-ordinates are in unit box or not
@@ -27,6 +28,7 @@ def load_halos(args):
         halos['r200'] = catalog[:, 6]  # Mpc
 
         del catalog
+        print('-- catalog unloaded')
 
         # for now assuming the velocity is 0.2 times the velocity as place holder
         # need to use some empirical relation here
@@ -35,22 +37,27 @@ def load_halos(args):
 
         rho = 2.775e11 * Om0 * h**2  # Msun/Mpc^3
 
-        print('>> Computing mass of the halos...')
+        print('> Computing mass of the halos...')
         halos['Mvir'] = 4. / 3. * np.pi * np.power(halos['r200'], 3) * rho
         halos['Mhalo'] = np.copy(halos['Mvir'])
 
-        print('>> Computing redshifts of the halos...')
+        print('> Computing redshifts of the halos...')
         cosmo = FlatLambdaCDM(H0=H0, Om0=Om0)
         zs = np.linspace(z1, z2, 1000)
         rs = cosmo.comoving_distance(zs).value
         r_dist = np.sqrt(np.sum(np.power(halos['xyz'], 2), axis=1))
         halos['redshift'] = np.interp(r_dist, rs, zs)
 
-        # Concetraition is estimated usin Duffy et.al. Table 1
+        del r_dist
+
+        # Concentraition is estimated usin Duffy et.al. Table 1
         # https://arxiv.org/pdf/0804.2486.pdf
+        print('> Computing concentration...')
         concen = 7.85 * np.power(halos['Mhalo'] / (2e+12/h), -0.081)
-        concen = concen / np.power(1.0+halos['redshift'], 0.71)
+        concen = concen / np.power(1.0 + halos['redshift'], 0.71)
         halos['rsr200'] = 1. / concen
+
+        del concen
 
     print('>> Finish loading, number of halos: {0:d}'.format(
         halos['xyz'].shape[0]))
@@ -62,7 +69,7 @@ def load_halos(args):
         for i, c in enumerate(['x', 'y', 'z']):
             print('-- {0:s}: {1:12.5e} {2:12.5e}'.format(
                 c, halos[p][:, i].min(), halos[p][:, i].max()))
-    print('-- Mhalo: {0:12.5e} {1:12.5e}'.format(
+    print('-- Mhalo:\n-- {0:12.5e} {1:12.5e}'.format(
         halos['Mhalo'].min(), halos['Mhalo'].max()))
 
     # halo mass function
