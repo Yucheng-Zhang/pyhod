@@ -300,7 +300,10 @@ def hod(args, halos, galcat='', int_r200='', int_rsr200='', rho_c=0, write=0):
     print('> Number of Sat: {0:d}'.format(nsatsel))
 
     if write == 1:
-        header = 'Galaxy catalog:\n'
+        header = 'Halo catalog: {}\n'.format(args.hcat)
+        header += 'Galaxy catalog:\n'
+        header += 'Number of galaxies, BCG: {0:d}, Sat: {1:d}, Tot: {2:d}\n' \
+            .format(nbcgsel, nsatsel, Ngal)
         header += 'x   y   z   Vx   Vy   Vz   sigV   Mhalo   flag (10: Sat, 100: BCG)'
         fmt = '16.8g ' * galcat.shape[1]
         np.savetxt(args.gcat, galcat[:Ngal, :], header=header, fmt=fmt)
