@@ -247,12 +247,12 @@ def hod(args, halos, galcat='', int_r200='', int_rsr200='', rho_c=0, write=0):
     meanSat = MeanSat(args, halos['Mhalo'], meanBCG)
 
     # populte BCG
-    print('> Populating BCG...')
+    print('>> Populating BCG...')
     urand = np.random.random(nhalo)
     index = urand < meanBCG
     nbcgsel = np.sum(index)
 
-    print('> Number of BCG {0:d}'.format(nbcgsel))
+    print('> Number of BCG: {0:d}'.format(nbcgsel))
 
     if isinstance(galcat, str):
         ntmp = np.int(1.2 * nbcgsel)
@@ -265,7 +265,7 @@ def hod(args, halos, galcat='', int_r200='', int_rsr200='', rho_c=0, write=0):
 
         galcat = np.zeros(ntmp * ncols).reshape(ntmp, ncols)
 
-    galcat[:nbcgsel, :3] = halos.['xyz'][index, :]
+    galcat[:nbcgsel, :3] = halos['xyz'][index, :]
     if galcat.shape[1] > 3:
         galcat[:nbcgsel, 3:6] = args.gammaHV * halos['vxyz'][index, :]
 
@@ -275,7 +275,7 @@ def hod(args, halos, galcat='', int_r200='', int_rsr200='', rho_c=0, write=0):
         galcat[:nbcgsel, 8] = 100
 
     # populate satelite
-    print('> Populating satelite...')
+    print('>> Populating satelite...')
     Nsat = np.random.poisson(lam=meanSat)
     index = Nsat > 0  # halos with non-zero satelites
 
@@ -290,10 +290,10 @@ def hod(args, halos, galcat='', int_r200='', int_rsr200='', rho_c=0, write=0):
         #rsr200 = interpolate.int_rsr200(np.log10(hcat[index,Mind])-12.0)
         rsr200 = interp_exterp1d(halos['Mhalo'][index], int_rsr200)
         # interpolate and linearly extrapolate
-        galcat, nsatsel, Ngal = populate_satelite(args, hcat, index, galcat,
+        galcat, nsatsel, Ngal = populate_satelite(args, halos, index, galcat,
                                                   nbcgsel, rho_c, Nsat[index], r200, rsr200)
     else:
-        galcat, nsatsel, Ngal = populate_satelite(args, hcat, index, galcat,
+        galcat, nsatsel, Ngal = populate_satelite(args, halos, index, galcat,
                                                   nbcgsel, 0, Nsat[index],
                                                   halos['r200'][index], halos['rsr200'][index])
 
@@ -305,6 +305,6 @@ def hod(args, halos, galcat='', int_r200='', int_rsr200='', rho_c=0, write=0):
         header += 'Number of galaxies, BCG: {0:d}, Sat: {1:d}, Tot: {2:d}\n' \
             .format(nbcgsel, nsatsel, Ngal)
         header += 'x   y   z   Vx   Vy   Vz   sigV   Mhalo   flag (10: Sat, 100: BCG)'
-        fmt = '16.8g ' * galcat.shape[1]
+        fmt = '%16.8g ' * galcat.shape[1]
         np.savetxt(args.gcat, galcat[:Ngal, :], header=header, fmt=fmt)
         print(':: Galaxy catalog: {}'.format(args.gcat))
