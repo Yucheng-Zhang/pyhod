@@ -110,14 +110,13 @@ class hod:
 
             self.halos['nhalo'] = self.halos['xyz'].shape[0]
 
-        print(':: Finish loading, number of halos: {0:d}'.format(
-            self.halos['nhalo']))
-        print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
-
-        if self.halos['sigv'] == None:  # set velocity dispersion, need empirical relation
             print('>> setting velocity dispersion...')
             self.halos['sigv'] = 0.2 * \
                 np.sqrt(np.sum(np.power(self.halos['vxyz'], 2), axis=1))
+
+        print(':: Finish loading, number of halos: {0:d}'.format(
+            self.halos['nhalo']))
+        print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
     def c_meanNC(self, LMmin=13.67, sigma=0.81):
         '''Compute mean number of BCG.'''
