@@ -151,7 +151,7 @@ class hod:
         '''Compute mean number of BCG.'''
         print('>> Computing mean number of BCG...')
         t0 = time.time()
-        # lnMmin = np.log(10.0) * self.LMmin  # np.log is ln, np.log10 is log
+        # np.log is ln, np.log10 is log
         Mdiff = (self.LMmin - np.log10(self.halos['M'])) / self.sigma
         self.halos['meanNc'] = 0.5 * special.erfc(Mdiff)
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
