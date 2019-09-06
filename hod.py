@@ -8,6 +8,8 @@ from scipy import special, interpolate
 import time
 import healpy as hp
 from . import utils
+import matplotlib.pyplot as plt
+import sys
 
 
 class hod:
@@ -48,6 +50,8 @@ class hod:
         self.LMcut, self.LMsat, self.alpha = None, None, None
         # velocity related
         self.gammaHV, self.gammaIHV = None, None
+        # flag
+        self.hod_params_flag = False
 
         ### galaxy properties ###
         self.gcat = collections.OrderedDict()
@@ -118,24 +122,47 @@ class hod:
             self.halos['nhalo']))
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
-    def c_meanNC(self, LMmin=13.67, sigma=0.81):
-        '''Compute mean number of BCG.'''
+    def set_hod_params(self, LMmin=13.67, sigma=0.81, LMcut=11.62, LMsat=14.93, alpha=0.43):
+        '''Set HOD parameters.'''
+        # mean BCG
         self.LMmin, self.sigma = LMmin, sigma
+        # mean Satellite
+        self.LMcut, self.LMsat, self.alpha = LMcut, LMsat, alpha
+
+        self.hod_params_flag = True
+
+    def populate(self, froot=''):
+        '''Populate all.'''
+        if not self.hod_params_flag:
+            sys.exit('!! Set HOD Parameters first! Run self.set_hod_params()!')
+
+        self.c_meanNC()
+        self.c_meanNS()
+        self.populate_C()
+        self.populate_S()
+
+        self.make_header()
+
+        if type(froot) == str and froot != '':
+            self.write_gcat(froot + '.gcat')
+            self.write_gcat(froot + '_rdzw.dat')
+
+    def c_meanNC(self):
+        '''Compute mean number of BCG.'''
         print('>> Computing mean number of BCG...')
         t0 = time.time()
         # lnMmin = np.log(10.0) * self.LMmin  # np.log is ln, np.log10 is log
-        Mdiff = (LMmin - np.log10(self.halos['M'])) / self.sigma
+        Mdiff = (self.LMmin - np.log10(self.halos['M'])) / self.sigma
         self.halos['meanNc'] = 0.5 * special.erfc(Mdiff)
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
-    def c_meanNS(self, LMcut=11.62, LMsat=14.93, alpha=0.43):
+    def c_meanNS(self):
         '''Compute mean number of Satellite.'''
-        self.LMcut, self.LMsat, self.alpha = LMcut, LMsat, alpha
         print('>> Computing mean number of satellite...')
         t0 = time.time()
-        Mcut, Msat = np.power(10, LMcut), np.power(10, LMsat)
+        Mcut, Msat = np.power(10, self.LMcut), np.power(10, self.LMsat)
         self.halos['meanNs'] = self.halos['meanNc'] * \
-            np.power(self.halos['M']/Msat, alpha) * \
+            np.power(self.halos['M']/Msat, self.alpha) * \
             np.exp(-Mcut/self.halos['M'])
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
@@ -311,14 +338,25 @@ class hod:
 
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
-    def p_hmz(self):
-        '''Halo mass completeness w/ redshift.'''
-        pass
+    def p_hmz(self, dz=0.05):
+        '''Halo mass completion w/ redshift.'''
+        nbins = int((self.zmax - self.zmin) / dz)
+        print('z_min   z_max      M200_min (Msun/h)      R200 (Kpc/h)')
+        for i in range(nbins):
+            z1, z2 = self.zmin + i*dz, self.zmin + (i+1)*dz
+            idx = np.where((z1 < self.halos['redshift']) & (
+                self.halos['redshift'] < z2))[0]
+            id_min = np.argmin(self.halos['M'][idx])
+            M_min = self.halos['M'][idx[id_min]]
+            # corresponding R in Kpc/h
+            R_cor = self.halos['R'][idx[id_min]] * 1000.
+            print('{0:5g}   {1:5g}   {2:15.5e}   {3:20.5e}'.format(
+                z1, z2, M_min, R_cor))
 
     def p_hmf(self):
         '''Halo mass function.'''
         pass
 
-    def p_gcatz(self):
+    def p_gcatz(self, dz=0.05):
         '''Galaxy catalog redshift distribution.'''
         pass
