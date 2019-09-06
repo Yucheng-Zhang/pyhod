@@ -4,8 +4,10 @@ Halo Occupation Distribution.
 import numpy as np
 import collections
 from astropy.cosmology import FlatLambdaCDM
-from scipy import special
+from scipy import special, interpolate
 import time
+import healpy as hp
+from . import utils
 
 
 class hod:
@@ -16,8 +18,11 @@ class hod:
         self.Om0 = Om0
         self.h0 = h0
         self.H0 = 100 * h0
+        self.cosmo = FlatLambdaCDM(H0=self.H0, Om0=self.Om0)
 
         self.hfile, self.hftype = None, None
+
+        self.zmin, self.zmax = None, None
 
         ### halo properties ###
         self.halos = collections.OrderedDict()
@@ -52,9 +57,19 @@ class hod:
         self.gcat['nBCG'] = None
         self.gcat['nSat'] = None
 
-    def load_halos(self, fn, ftype='websky', Delta=200., z1=0.0, z2=5.0, dz=0.001):
+        ### output header ###
+        self.header = None
+
+        ### chi2z interpolator ###
+        zs = np.arange(0., 10., 0.001)
+        chis = self.cosmo.comoving_distance(zs).value * self.h0  # Mpc/h
+        self.chi2z = interpolate.interp1d(chis, zs, kind='cubic',
+                                          bounds_error=True)
+
+    def load_halos(self, fn, zmin, zmax, ftype='websky', Delta=200.):
         '''Load halo catalog.'''
         self.hfile, self.hftype = fn, ftype
+        self.zmin, self.zmax = zmin, zmax
         print('>> Loading halo catalog: {0:s}'.format(fn))
         t0 = time.time()
         print('>> file type: {0:s}'.format(ftype))
@@ -67,27 +82,31 @@ class hod:
 
             hcat = np.fromfile(hf, count=n_halo*10, dtype=np.float32)
             hcat = np.reshape(hcat, (n_halo, 10))
+            chi_h = np.sqrt(np.sum(np.power(hcat[:, :3], 2), axis=1))
 
-            self.halos['xyz'] = hcat[:, :3]  # Mpc (comoving)
-            self.halos['vxyz'] = hcat[:, 3:6]  # km/s
+            print('>> cut with redshift bin [{0:g}, {1:g}]'.format(zmin, zmax))
+            chi_min = self.cosmo.comoving_distance(zmin).value  # Mpc/h
+            chi_max = self.cosmo.comoving_distance(zmax).value  # Mpc/h
+            idx = np.where((chi_min <= chi_h) & (chi_h <= chi_max))[0]
+
+            self.halos['xyz'] = hcat[idx, :3] * self.h0  # Mpc/h (comoving)
+            self.halos['vxyz'] = hcat[idx, 3:6]  # km/s
+            R_TH = hcat[idx, 6] * self.h0  # Mpc/h
+            chi_h = chi_h[idx] * self.h0  # Mpc/h
 
             print('>> computing redshift of the halos...')
-            cosmo = FlatLambdaCDM(H0=self.H0, Om0=self.Om0)
-            zs = np.arange(z1, z2+dz, dz)
-            chis = cosmo.comoving_distance(zs).value
-            chi_h = np.sqrt(np.sum(np.power(self.halos['xyz'], 2), axis=1))
-            self.halos['redshift'] = np.interp(chi_h, chis, zs)
+            self.halos['redshift'] = self.chi2z(chi_h)
 
             print('>> computing mass of the halos...')
-            rho_m0 = 2.775e11 * self.Om0 * self.h0**2  # Msun/Mpc^3
+            rho_m0 = 2.775e11 * self.Om0  # h^2Msun/Mpc^3
             self.halos['M'] = 4./3. * np.pi * \
-                np.power(hcat[:, 6], 3) * rho_m0  # hcat[:, 6]: R_TH
+                np.power(R_TH, 3) * rho_m0  # Msun/h
 
             print('>> computing radius of the halos...')
             # matter density at redshift of each halo
             rho_mz = rho_m0 * np.power(1+self.halos['redshift'], 3)
             self.halos['R'] = np.power(
-                self.halos['M'] * 3./(4.*np.pi) / self.halos['Delta'] / rho_mz, 1./3.)  # Mpc
+                self.halos['M'] * 3./(4.*np.pi) / self.halos['Delta'] / rho_mz, 1./3.)  # Mpc/h
 
             self.halos['nhalo'] = self.halos['xyz'].shape[0]
 
@@ -100,7 +119,7 @@ class hod:
             self.halos['sigv'] = 0.2 * \
                 np.sqrt(np.sum(np.power(self.halos['vxyz'], 2), axis=1))
 
-    def c_meanNc(self, LMmin=13.67, sigma=0.81):
+    def c_meanNC(self, LMmin=13.67, sigma=0.81):
         '''Compute mean number of BCG.'''
         self.LMmin, self.sigma = LMmin, sigma
         print('>> Computing mean number of BCG...')
@@ -110,7 +129,7 @@ class hod:
         self.halos['meanNc'] = 0.5 * special.erfc(Mdiff)
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
-    def c_meanNs(self, LMcut=11.62, LMsat=14.93, alpha=0.43):
+    def c_meanNS(self, LMcut=11.62, LMsat=14.93, alpha=0.43):
         '''Compute mean number of Satellite.'''
         self.LMcut, self.LMsat, self.alpha = LMcut, LMsat, alpha
         print('>> Computing mean number of satellite...')
@@ -121,15 +140,15 @@ class hod:
             np.exp(-Mcut/self.halos['M'])
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
-    def populate_BCG(self, gammaHV=1.0):
+    def populate_C(self, gammaHV=1.0):
         '''Populate BCG.'''
         self.gammaHV = gammaHV
         print('>> Populating BCG...')
         t0 = time.time()
         # Bernoulli (0-1) distribution P(1) = <Nc>
         urand = np.random.random(self.halos['nhalo'])
-        idx = np.where(urand < self.halos['meanNc'])
-        self.gcat['nBCG'] = idx[0].shape[0]  # total number of BCGs
+        idx = np.where(urand < self.halos['meanNc'])[0]
+        self.gcat['nBCG'] = idx.shape[0]  # total number of BCGs
         print(':: Number of BCGs: {0:d}'.format(self.gcat['nBCG']))
 
         # get position & velocity of BCGs
@@ -141,7 +160,7 @@ class hod:
         print(':: Finish populating, time elapsed: {0:.2f} s'.format(
             time.time()-t0))
 
-    def populate_Sat(self, gammaIHV=1.0):
+    def populate_S(self, gammaIHV=1.0):
         '''Populate Satellite.'''
         self.gammaIHV = gammaIHV
         print('>> Populating Satellite...')
@@ -163,7 +182,7 @@ class hod:
         print('> gcat extended')
 
         # only populate halos with non-zero satellites
-        idx = np.where(NSat > 0)
+        idx = np.where(NSat > 0)[0]
         NSat = NSat[idx]
         print('> number of halos contains satellites: {0:d}'.format(
             NSat.shape[0]))
@@ -236,24 +255,57 @@ class hod:
             self.gcat['nSat']))
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
-    def write_gcat(self, fn):
-        '''Output the galaxy catalog.'''
-        t0 = time.time()
-        header = 'HOD galaxy catalog\n'
-        header += 'Halo file: {0:s}, type: {1:s}\n'.format(
+    def make_header(self):
+        '''Make output header.'''
+        self.header = 'HOD galaxy catalog\n'
+        self.header += 'Halo file: {0:s}, type: {1:s}\n'.format(
             self.hfile, self.hftype)
-        header += 'Parameters: LMmin = {0:g}, sigma = {1:g}, '.format(
+        self.header += 'Cosmology: Om0 = {0:g}, H0 = {1:g}\n'.format(
+            self.Om0, self.H0)
+        self.header += 'Parameters: LMmin = {0:g}, sigma = {1:g}, '.format(
             self.LMmin, self.sigma)
-        header += 'LMcut = {0:g}, LMsat = {1:g}, alpha = {2:g}\n'.format(
+        self.header += 'LMcut = {0:g}, LMsat = {1:g}, alpha = {2:g}\n'.format(
             self.LMcut, self.LMsat, self.alpha)
-        header += ' # halo: {0:d}, # BCG: {1:d}, # Sat: {2:d}\n'.format(
-            self.halos['nhalo'], self.gcat['nBCG'], self.gcat['nSat'])
-        header += 'x   y   z   vx   vy   vz   type (0: BCG; 1: Sat)'
+        self.header += 'Redshift range: [{0:g}, {1:g}]\n'.format(
+            self.zmin, self.zmax)
+        self.header += 'Number - halo: {0:d}, BCG: {1:d}, Sat: {2:d}, Sat / BCG = {3:.2f} %\n'.format(
+            self.halos['nhalo'], self.gcat['nBCG'], self.gcat['nSat'], 100*self.gcat['nSat']/self.gcat['nBCG'])
+
+    def write_gcat(self, fn):
+        '''Write the galaxy catalog.'''
+        print('>> writing to file: {0:s}'.format(fn))
+        t0 = time.time()
+        header = self.header + \
+            'x (Mpc/h)   y (Mpc/h)   z (Mpc/h)   vx (km/s)   vy (km/s)   vz (km/s)  type (0: BCG; 1: Sat)'
         fmt = '%15.7e  %15.7e  %15.7e  %15.7e  %15.7e  %15.7e  %2d'
         np.savetxt(fn, np.column_stack(
             (self.gcat['xyz'], self.gcat['vxyz'], self.gcat['type'])),
             fmt=fmt, header=header)
-        print(':: Galaxy catalog saved: {0:s}'.format(fn))
+        print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
+
+    def write_rdzw(self, fn):
+        '''Write the galaxy catalog in RA, DEC, Z (real & RSD) and weight.'''
+        print('>> writing to file: {0:s}'.format(fn))
+        t0 = time.time()
+        chi_real = np.sqrt(np.sum(np.power(self.gcat['xyz'], 2), axis=1))
+        vlos = np.sum(self.gcat['xyz'] * self.gcat['vxyz'], axis=1) / chi_real
+
+        z_real = self.chi2z(chi_real)  # real space redshift
+
+        theta, phi = hp.vec2ang(self.gcat['xyz'])
+        ra, dec = utils.get_ra_dec(theta, phi)
+
+        Hz = self.cosmo.efunc(z_real) * 100.  # km/s/(Mpc/h)
+        chi_rsd = chi_real + (1. + z_real) * vlos / Hz
+        z_rsd = self.chi2z(chi_rsd)
+
+        weight = np.ones(z_rsd.shape[0])
+
+        header = self.header + 'RA   DEC   Z (RSD)   weight'
+        fmt = '%15.7e   %15.7e   %15.7e   %3g'
+        np.savetxt(fn, np.column_stack((ra, dec, z_rsd, weight)),
+                   fmt=fmt, header=header)
+
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
     def hmf(self):
