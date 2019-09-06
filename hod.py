@@ -254,7 +254,7 @@ class hod:
             self.gcat['nSat']))
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
-    def make_header(self):
+    def make_header(self, show=True):
         '''Make output header.'''
         self.header = 'HOD galaxy catalog\n'
         self.header += 'Halo file: {0:s}, type: {1:s}\n'.format(
@@ -269,6 +269,10 @@ class hod:
             self.zmin, self.zmax)
         self.header += 'Number - halo: {0:d}, BCG: {1:d}, Sat: {2:d}, Sat / BCG = {3:.2f} %\n'.format(
             self.halos['nhalo'], self.gcat['nBCG'], self.gcat['nSat'], 100*self.gcat['nSat']/self.gcat['nBCG'])
+
+        if show:
+            print('Header w/ basic properties:')
+            print(self.header)
 
     def write_gcat(self, fn):
         '''Write the galaxy catalog.'''
@@ -307,6 +311,14 @@ class hod:
 
         print('<< time elapsed: {0:.2f} s'.format(time.time()-t0))
 
-    def hmf(self):
-        '''Get the halo mass function.'''
+    def p_hmz(self):
+        '''Halo mass completeness w/ redshift.'''
+        pass
+
+    def p_hmf(self):
+        '''Halo mass function.'''
+        pass
+
+    def p_gcatz(self):
+        '''Galaxy catalog redshift distribution.'''
         pass

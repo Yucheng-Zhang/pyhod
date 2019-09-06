@@ -1,6 +1,8 @@
 # pyhod
 Python code for Halo Occupation Distribution.
 
+- Yucheng Zhang, Shadab Alam
+
 ```python
 from halod.hod import hod
 
@@ -26,6 +28,3 @@ wsk.write_rdzw('test_rdzw.dat') # RA, DEC, Z, weight
 
 - Emperical relations for velocity dispersion.
 - Optimize radial dist of satellites.
-
-## Acknowledgement
-The code is based on Shadab's HOD code.
